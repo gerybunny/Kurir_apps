@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurir App - Toko Bp. Aman</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; }
+        body { background: #eef2f5; color: #333; max-width: 500px; margin: 0 auto; padding: 12px; padding-bottom: 40px; }
+        
+        .header-kurir { background: #25D366; color: white; padding: 16px; border-radius: 12px; text-align: center; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(37, 211, 102, 0.2); }
+        .header-kurir h2 { font-size: 18px; margin-bottom: 4px; }
+        .status-koneksi { font-size: 11px; background: rgba(255,255,255,0.25); display: inline-block; padding: 2px 10px; border-radius: 10px; font-weight: bold; }
+
+        .kartu-tugas { background: white; border-radius: 12px; padding: 14px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border-left: 6px solid #ff9800; }
+        
+        .tugas-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+        .nama-pelanggan { font-weight: bold; font-size: 15px; color: #222; }
+        .tag-status-kurir { background: #fff3cd; color: #856404; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; }
+
+        .tugas-tgl { font-size: 11px; color: #666; margin-bottom: 8px; }
+        
+        .box-alamat { background: #f8f9fa; border: 1px solid #e9ecef; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; line-height: 1.4; color: #444; }
+        .rincian-barang { background: #f1f8f6; border: 1px dashed #c8e6c9; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; font-size: 12px; color: #2e7d32; }
+
+        .grup-tombol-kurir { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn-k { flex: 1; padding: 10px 8px; border: none; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px; text-decoration: none; text-align: center; }
+        
+        .btn-peta { background: #007bff; color: white; }
+        .btn-wa { background: #25D366; color: white; }
+        .btn-selesai-kurir { background: #28a745; color: white; width: 100%; margin-top: 6px; padding: 12px; font-size: 13px; }
+
+        .kosong-kurir { text-align: center; color: #777; padding: 40px 20px; background: white; border-radius: 12px; margin-top: 20px; }
+        .kosong-kurir h3 { margin-bottom: 6px; color: #555; }
+    </style>
+</head>
+<body>
+
+<div class="header-kurir">
+    <h2>🛵 APLIKASI KURIR TOKO</h2>
+    <span class="status-koneksi" id="statusCekKurir">⏳ Menghubungkan tugas...</span>
+</div>
+
+<div id="daftarTugasKurir"></div>
+
+<script>
+const URL_PENYIMPANAN = "https://script.google.com/macros/s/AKfycbzCHkAsBackskPbhrPJKClj31_8unXGdNw79uhlpzFTeE242OZtS4_Yj9S6zxNGPefV/exec";
+
+let tugasData = [];
+
+async function muatTugasKurir() {
+    const statusEl = document.getElementById('statusCekKurir');
+    try {
+        const res = await fetch(URL_PENYIMPANAN + "?aksi=ambilRiwayat", { cache: 'no-store' });
+        const json = await res.json();
+        const dataRiwayat = Array.isArray(json) ? json : (json.data || []);
+
+        // Kurir HANYA mengambil pesanan yang berstatus DIPROSES
+        tugasData = dataRiwayat.filter(r => r.status === 'DIPROSES');
+
+        statusEl.textContent = "🟢 Siap Mengirim (" + tugasData.length + " Tugas)";
+        statusEl.style.background = "rgba(40,167,69,0.3)";
+
+        renderTugasKurir();
+    } catch (e) {
+        statusEl.textContent = "🔴 Gagal Memuat Tugas";
+        statusEl.style.background = "rgba(220,53,69,0.3)";
+    }
+}
+
+function renderTugasKurir() {
+    const wadah = document.getElementById('daftarTugasKurir');
+
+    if (tugasData.length === 0) {
+        wadah.innerHTML = `
+            <div class="kosong-kurir">
+                <h3>🎉 Belum ada tugas pengiriman</h3>
+                <p style="font-size:12px;">Pesanan yang berstatus "Diproses" oleh admin akan muncul otomatis di sini.</p>
+            </div>`;
+        return;
+    }
+
+    wadah.innerHTML = tugasData.map(p => {
+        const barisKe = p.barisKe || p.barisAsliDiSheet;
+        const nama = p.namaPelanggan || "Pelanggan";
+        const alamatAsli = p.infoTambahan || '-';
+        
+        // Ekstraksi Link Google Maps atau Koordinat dari teks alamat secara otomatis
+        let linkMaps = "https://maps.google.com/?q=" + encodeURIComponent(alamatAsli);
+        const regexUrl = /(https?:\/\/[^\s]+)/g;
+        const ketemuUrl = alamatAsli.match(regexUrl);
+        if (ketemuUrl) {
+            linkMaps = ketemuUrl[0]; // Ambil URL Maps yang diselipkan otomatis oleh tombol GPS web toko
+        }
+
+        // Ekstraksi Nomor HP / WhatsApp (jika ada pola angka nomor HP di alamat atau catatan)
+        let linkWA = "https://wa.me/"; // Default kosong jika tidak terdeteksi
+        // Jika pelanggan menyertakan nomor HP, kita arahkan ke WA, atau kurir bisa klik tombol chat umum
+        // Sebagai alternatif cerdas, kita buat tombol WA langsung membuka chat atau pencarian kontak
+        const listBarangTeks = Array.isArray(p.barang) 
+            ? p.barang.map(b => `• ${b.nama} <b>(${b.jumlah}x)</b>`).join('<br>') 
+            : "";
+
+        return `
+            <div class="kartu-tugas">
+                <div class="tugas-top">
+                    <span class="nama-pelanggan">👤 ${nama}</span>
+                    <span class="tag-status-kurir">DIPROSES</span>
+                </div>
+                <div class="tugas-tgl">📅 ${p.tanggal || '-'}</div>
+                
+                <div class="box-alamat">
+                    <b>📍 Alamat / Lokasi Tujuan:</b><br>
+                    ${alamatAsli}
+                </div>
+
+                <div class="rincian-barang">
+                    <b>📦 Barang yang Dibawa:</b><br>
+                    ${listBarangTeks}
+                    <div style="margin-top:6px; font-weight:bold; color:#128C7E;">Total Tagihan: Rp ${(p.total||0).toLocaleString('id-ID')}</div>
+                </div>
+
+                <div class="grup-tombol-kurir">
+                    <a href="${linkMaps}" target="_blank" class="btn-k btn-peta">
+                        🗺️ Buka Peta
+                    </a>
+                    <a href="https://wa.me/?text=${encodeURIComponent('Halo ' + nama + ', saya kurir Toko Bp. Aman yang akan mengantar pesanan Anda.')}" target="_blank" class="btn-k btn-wa">
+                        📲 Chat WA
+                    </a>
+                </div>
+
+                <button class="btn-k btn-selesai-kurir" onclick="selesaikanPengiriman(${barisKe}, '${nama}')">
+                    ✅ SELESAIKAN PENGIRIMAN
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+// === FUNGSI UTAMA KURIR: SELESAIKAN PENGIRIMAN ===
+async function selesaikanPengiriman(barisKe, namaPelanggan) {
+    const yakin = confirm(`Konfirmasi: Apakah pesanan untuk "${namaPelanggan}" sudah sampai dan dibayar?`);
+    if (!yakin) return;
+
+    document.getElementById('statusCekKurir').textContent = "⏳ Menyimpan status selesai...";
+
+    try {
+        await fetch(URL_PENYIMPANAN, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ aksi: "ubahStatusPesanan", data: { barisKe: barisKe, status: 'SELESAI' } })
+        });
+
+        alert("🎉 Pengiriman berhasil diselesaikan! Status transaksi otomatis berubah menjadi SELESAI.");
+        muatTugasKurir();
+    } catch (e) {
+        alert("Gagal memperbarui status pengiriman. Periksa koneksi internet!");
+    }
+}
+
+// Auto-refresh tugas setiap 10 detik agar kurir tahu jika ada pesanan baru yang diproses admin
+setInterval(muatTugasKurir, 10000);
+window.onload = muatTugasKurir;
+</script>
+
+</body>
+</html>
